@@ -18,14 +18,14 @@ A versão antiga (landing page HTML/PHP/SheetDB da faculdade) vive só na branch
 
 ```bash
 # API (server/)
-cp .env.example .env     # preencher MONGODB_URI, JWT_SECRET, CLIENT_ORIGIN
+cp .env.example .env     # preencher MONGODB_URI, JWT_SECRET, CLIENT_ORIGIN (DNS_SERVERS opcional)
 npm run dev              # tsx watch, http://localhost:3333
 npm run seed             # APAGA e recria users/services/doctors/appointments
 npm run typecheck        # tsc --noEmit
 npm run build && npm start
 
 # Front (client/)
-npm run dev              # http://localhost:5173, proxy /api -> localhost:3333
+npm run dev              # http://localhost:5173, proxy /api -> localhost:3333 (VITE_MOCK=1 = sem backend)
 npm run build            # tsc -b && vite build (é o typecheck do front)
 npm run lint             # oxlint
 ```
@@ -46,14 +46,19 @@ Não há testes automatizados ainda. Logins do seed (senha `senha12345`): `pacie
 
 **Erros:** lançar `HttpError(status, msg)` (`lib/httpError.ts`) ou deixar o `ZodError` subir; `middleware/error.ts` converte. Express 5 propaga erros de handlers `async` sozinho (sem `try/catch` nem wrapper). Rotas públicas de catálogo (`/services`, `/doctors`, `/doctors/:id/slots`) ficam em `routes/catalog.ts`; `/auth` tem rate limit em `app.ts`.
 
+**Front do paciente** (`client/src/pages/`): `Services`, `Doctors`, `Book` (wizard serviço → médico → dia/horário → confirmar), `Auth` (login/cadastro, mesmo componente com `mode`), `MyAppointments`, `NotFound`; `ProtectedRoute` protege `/minhas-consultas`. O estado do wizard vive na **URL** (`?service=&doctor=&date=&start=`), então o login no meio do fluxo não perde a escolha. Datas/horas são exibidas no fuso da clínica via `lib/format.ts`; `lib/icons.tsx` mapeia `Service.icon` (kebab-case lucide) — ao criar um serviço com ícone novo, adicionar ao mapa.
+
+**Mock do front:** `VITE_MOCK=1 npm run dev` (só em dev) troca `api()` por uma API falsa em memória (`client/src/lib/mock.ts`) para ver o visual sem backend. Os dados somem ao recarregar e as regras (ex.: 409) não são reais — não usar para validar comportamento.
+
 ## Estado atual e próximos passos
 
-Feito: back completo da fase 1 (auth, catálogo, slots, agendamento, cancelamento, seed) — **compila, mas nunca foi executado contra um banco real** (só a lógica pura de slots foi testada). Front: scaffold + Tailwind com tema `brand-*` + `Layout` + `Home` listando serviços da API; build passa.
+Feito e **testado de ponta a ponta contra o Atlas** (24 checagens via HTTP: register/login, slots, agendar, 409 em horário duplicado, 400 para horário fora da grade/passado/serviço errado, 403 ao cancelar consulta alheia, cancelar libera o slot, admin vê todas). Front do paciente completo (catálogo, wizard de agendamento, auth, minhas consultas com cancelar). Ainda **não há testes automatizados** e o front só foi validado por build/lint, não em navegador com dados reais.
 
-Pendências imediatas (nesta ordem):
-1. Criar cluster gratuito no MongoDB Atlas (liberar o IP, ex. 0.0.0.0/0 para o Render), criar `server/.env`, rodar `npm run seed` e `npm run dev` e testar a API de ponta a ponta (register/login, slots, agendar, 409 em horário duplicado, cancelar).
-2. Front do paciente — rotas ainda não criadas (há um TODO em `client/src/App.tsx`): `/servicos`, `/profissionais`, `/entrar`, `/cadastro`, `/agendar` (wizard: serviço → médico → data → horário → confirmar), `/minhas-consultas` (com cancelar), rota protegida. A Home usa um ícone genérico; o campo `Service.icon` (nome lucide) ainda não é mapeado.
-3. Deploy: Render (`server/`, build `npm install && npm run build`, start `npm start`, vars `MONGODB_URI`/`JWT_SECRET`/`CLIENT_ORIGIN`) e Netlify (`client/`, var `VITE_API_URL`; `public/_redirects` já trata o SPA). O plano gratuito do Render dorme após ~15 min — manter estados de loading amigáveis.
-4. Painel do hospital (role `admin`): agenda geral, CRUD de médicos/serviços/horários — rotas de escrita do admin ainda não existem na API.
+Pendências (nesta ordem):
+1. Deploy: Render (`server/`, build `npm install && npm run build`, start `npm start`, vars `MONGODB_URI`/`JWT_SECRET`/`CLIENT_ORIGIN`; no Atlas liberar `0.0.0.0/0` em Network Access) e Netlify (`client/`, var `VITE_API_URL`; `public/_redirects` já trata o SPA). O plano gratuito do Render dorme após ~15 min — manter estados de loading amigáveis.
+2. Painel do hospital (role `admin`): agenda geral, CRUD de médicos/serviços/horários — rotas de escrita do admin ainda não existem na API. `GET /appointments` já devolve todas para admin.
+3. Opcional: testes automatizados da API (o roteiro usado está nas regras acima) e revisão visual/responsiva do front.
 
-Git: `main` (commit `a6b8867`) e `legacy` já estão no GitHub (`origin`). Pendências de housekeeping: o repo ainda publica no GitHub Pages, que agora serve a `main` sem `index.html` na raiz — desativar o Pages (ou apontá-lo para `legacy` até o Netlify subir) e atualizar o link do portfólio para a URL do Netlify. O token do SheetDB do projeto antigo está no histórico do git — revogá-lo no painel do SheetDB.
+**Ambiente local (armadilhas já encontradas):** `server/.env` não vai para o git. Na `MONGODB_URI`, caracteres especiais da senha precisam ser codificados (`:` → `%3A`, `@` → `%40`) e **não** deve sobrar `:` extra antes da senha (dá `bad auth`). Se aparecer `querySrv ECONNREFUSED`, o DNS local está recusando consultas SRV: definir `DNS_SERVERS=8.8.8.8,1.1.1.1` no `.env` (lido em `server/src/env.ts`; no Render não é necessário).
+
+Git: `main` e `legacy` estão no GitHub (`origin`). Pendências de housekeeping: o repo ainda publica no GitHub Pages, que agora serve a `main` sem `index.html` na raiz — desativar o Pages (ou apontá-lo para `legacy` até o Netlify subir) e atualizar o link do portfólio para a URL do Netlify. O token do SheetDB do projeto antigo está no histórico da branch `legacy` (`formulario.js`, `recebe.js`) — revogá-lo/apagar a API no painel do SheetDB (reescrever o histórico não adianta, a URL já é pública).
