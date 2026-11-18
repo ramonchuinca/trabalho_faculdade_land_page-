@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, CalendarCheck, ShieldCheck, Stethoscope } from 'lucide-react'
+import { ArrowRight, CalendarCheck, ShieldCheck } from 'lucide-react'
 import { api, type Service } from '../lib/api'
+import { money } from '../lib/format'
+import { ServiceIcon } from '../lib/icons'
 
 export default function Home() {
   const { data: services, isLoading, isError } = useQuery({
@@ -44,13 +46,11 @@ export default function Home() {
           {services?.map((s) => (
             <article key={s._id} className="rounded-2xl border border-line bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-                <Stethoscope className="size-6" />
+                <ServiceIcon name={s.icon} className="size-6" />
               </div>
               <h3 className="mt-4 font-semibold">{s.name}</h3>
               <p className="mt-1 line-clamp-3 text-sm text-muted">{s.description}</p>
-              <p className="mt-3 text-sm font-medium text-brand-700">
-                {s.price > 0 ? `R$ ${s.price.toFixed(2).replace('.', ',')}` : 'Gratuito'} · {s.durationMin} min
-              </p>
+              <p className="mt-3 text-sm font-medium text-brand-700">{money(s.price)} · {s.durationMin} min</p>
             </article>
           ))}
         </div>
