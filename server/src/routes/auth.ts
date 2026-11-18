@@ -12,7 +12,11 @@ const registerSchema = z.object({
   email: z.email(),
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres"),
   cpf: z.string().trim().optional(),
-  phone: z.string().trim().optional(),
+  // Obrigatório: a recepção confirma o agendamento por telefone/WhatsApp.
+  phone: z
+    .string()
+    .trim()
+    .refine((v) => /^\d{10,13}$/.test(v.replace(/\D/g, "")), "Informe um telefone válido com DDD"),
 });
 
 const loginSchema = z.object({ email: z.email(), password: z.string().min(1) });

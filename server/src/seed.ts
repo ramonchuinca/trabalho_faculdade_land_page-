@@ -5,11 +5,13 @@ import { User } from "./models/User.js";
 import { Service } from "./models/Service.js";
 import { Doctor } from "./models/Doctor.js";
 import { Appointment } from "./models/Appointment.js";
+import { Message } from "./models/Message.js";
+import { candidateSlots, clinicDateOf } from "./lib/slots.js";
 
 // Dados fictícios da clínica "Vitalis" para desenvolvimento/demonstração.
 // ATENÇÃO: apaga e recria tudo. Não rodar contra um banco com dados reais.
 await mongoose.connect(env.MONGODB_URI);
-await Promise.all([User.deleteMany({}), Service.deleteMany({}), Doctor.deleteMany({}), Appointment.deleteMany({})]);
+await Promise.all([User.deleteMany({}), Service.deleteMany({}), Doctor.deleteMany({}), Appointment.deleteMany({}), Message.deleteMany({})]);
 
 const services = await Service.insertMany([
   { name: "Consulta Clínica Geral", slug: "clinica-geral", icon: "stethoscope", durationMin: 30, price: 220, description: "Avaliação geral de saúde, acompanhamento de doenças crônicas e encaminhamentos." },
@@ -27,7 +29,7 @@ const bySlug = Object.fromEntries(services.map((s) => [s.slug, s._id]));
 const weekdays = (blocks: [string, string][], days = [1, 2, 3, 4, 5]) =>
   days.flatMap((weekday) => blocks.map(([start, end]) => ({ weekday, start, end })));
 
-await Doctor.insertMany([
+const doctors = await Doctor.insertMany([
   { name: "Dra. Helena Duarte", crm: "CRM-SP 123456", specialty: "Clínica Geral", bio: "Mais de 15 anos de experiência em clínica médica e medicina preventiva.", slotMinutes: 30, services: [bySlug["clinica-geral"], bySlug["vacinacao"]], workingHours: weekdays([["08:00", "12:00"], ["14:00", "18:00"]]) },
   { name: "Dr. Rafael Monteiro", crm: "CRM-SP 234567", specialty: "Cardiologia", bio: "Especialista em prevenção cardiovascular e hipertensão.", slotMinutes: 40, services: [bySlug["cardiologia"]], workingHours: weekdays([["09:00", "12:00"], ["14:00", "17:20"]], [1, 3, 5]) },
   { name: "Dra. Camila Azevedo", crm: "CRM-SP 345678", specialty: "Dermatologia", bio: "Dermatologia clínica e estética, com foco em prevenção do câncer de pele.", slotMinutes: 30, services: [bySlug["dermatologia"]], workingHours: weekdays([["08:30", "12:00"], ["13:30", "17:00"]], [2, 3, 4]) },
@@ -38,9 +40,45 @@ await Doctor.insertMany([
 ]);
 
 const passwordHash = await bcrypt.hash("senha12345", 12);
-await User.insertMany([
-  { name: "Administrador Vitalis", email: "admin@vitalis.test", passwordHash, role: "admin" },
-  { name: "Paciente Demo", email: "paciente@vitalis.test", passwordHash, role: "patient" },
+const [admin, paciente, maria, joao] = await User.insertMany([
+  { name: "Administrador Vitalis", email: "admin@vitalis.test", passwordHash, role: "admin", phone: "11999990000" },
+  { name: "Paciente Demo", email: "paciente@vitalis.test", passwordHash, role: "patient", phone: "11988887777" },
+  { name: "Maria Souza", email: "maria@vitalis.test", passwordHash, role: "patient", phone: "21977776666" },
+  { name: "João Lima", email: "joao@vitalis.test", passwordHash, role: "patient", phone: "31966665555" },
+]);
+
+// Consultas de demonstração (próximos dias úteis) para o painel da recepção não nascer vazio.
+const nextSlots = (doc: (typeof doctors)[number], n: number) => {
+  const out: Date[] = [];
+  for (let i = 1; i < 21 && out.length < n; i++) {
+    const day = clinicDateOf(new Date(Date.now() + i * 86_400_000));
+    out.push(...candidateSlots(doc, day).slice(0, n - out.length));
+  }
+  return out;
+};
+const svcOf = (doc: (typeof doctors)[number]) => doc.services[0];
+const demo = [
+  { patient: paciente, doc: doctors[0], idx: 0, confirmed: false },
+  { patient: paciente, doc: doctors[1], idx: 1, confirmed: true },
+  { patient: maria, doc: doctors[0], idx: 2, confirmed: false },
+  { patient: maria, doc: doctors[2], idx: 0, confirmed: false },
+  { patient: joao, doc: doctors[3], idx: 1, confirmed: false },
+];
+for (const d of demo) {
+  const start = nextSlots(d.doc, 3)[d.idx];
+  if (!start) continue;
+  await Appointment.create({
+    patient: d.patient._id,
+    doctor: d.doc._id,
+    service: svcOf(d.doc),
+    start,
+    end: new Date(start.getTime() + d.doc.slotMinutes * 60_000),
+    ...(d.confirmed ? { confirmedAt: new Date(), confirmedBy: admin._id, confirmChannel: "whatsapp" } : {}),
+  });
+}
+
+await Message.insertMany([
+  { patient: maria._id, from: "patient", sender: maria._id, text: "Olá! Posso trocar meu horário de dermatologia para a parte da tarde?" },
 ]);
 
 await mongoose.connection.syncIndexes();
