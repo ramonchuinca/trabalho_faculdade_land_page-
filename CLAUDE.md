@@ -65,7 +65,7 @@ Feito e **testado de ponta a ponta contra o Atlas** (roteiros HTTP: 24 do núcle
 Pendências (nesta ordem):
 1. Conferir o site no navegador (login paciente e `/painel` admin) e anotar o que quebrar. Housekeeping: desativar o GitHub Pages do repo e apontar o link do portfólio para o Netlify; **revogar o token do SheetDB** (está no histórico da branch `legacy`, em `formulario.js`/`recebe.js`; reescrever histórico não adianta, a URL já é pública).
 2. Segurança: o `JWT_SECRET` do Render foi colado igual ao do `.env` local; trocar por um exclusivo de produção antes de divulgar o link.
-3. Robustez do front: `api()` trata resposta não-JSON como `{}` com status 200, o que estoura `map is not a function` nas telas. Deveria lançar `ApiError` com mensagem clara (aconteceu quando `VITE_API_URL` não entrou no build).
+3. ~~Robustez do front~~ (feito): `api()` em `lib/api.ts` agora lança `ApiError` com mensagem clara quando a resposta não é JSON (status 0 = sem conexão/CORS; resposta não-JSON com 200 = formato inesperado, ex. HTML do Netlify sem `VITE_API_URL`; não-JSON com erro HTTP = servidor indisponível/acordando). Erros JSON da API seguem usando o `message` dela. As telas ainda não têm UI de erro dedicada para isso: mostram o que o React Query devolver.
 4. Painel do hospital — falta o CRUD de médicos/serviços/horários (rotas de escrita do admin ainda não existem na API). Ideias: remarcação feita pelo próprio paciente, notificação por e-mail/WhatsApp automático, papel `doctor` com agenda própria.
 5. Opcional: testes automatizados da API e revisão visual/responsiva do front. O plano gratuito do Render dorme após ~15 min (1ª requisição leva ~50 s) — manter estados de loading amigáveis.
 

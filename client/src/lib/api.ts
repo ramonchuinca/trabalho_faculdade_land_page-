@@ -29,21 +29,45 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenStore.get()
-  const res = await fetch(`${BASE}/api${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  })
-  const body = await res.json().catch(() => ({}))
+  let res: Response
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    })
+  } catch {
+    // Sem rede, API fora do ar ou bloqueio de CORS (o navegador não distingue os casos).
+    throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.')
+  }
+  // A API só responde JSON. Qualquer outra coisa (HTML do Netlify por falta de VITE_API_URL, página de erro do
+  // proxy enquanto o Render acorda, etc.) é falha de infraestrutura, não dado: não pode virar `{}` com status 200.
+  let body: unknown
+  try {
+    body = await res.json()
+  } catch {
+    body = undefined
+  }
   // 401 com token enviado = sessão inválida: limpa e avisa o app, em vez de ficar repetindo requisições (polling).
   if (res.status === 401 && token) {
     tokenStore.clear()
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
   }
-  if (!res.ok) throw new ApiError(res.status, body.message ?? 'Erro inesperado')
+  if (body === undefined) {
+    throw new ApiError(
+      res.status,
+      res.ok
+        ? 'O servidor respondeu em um formato inesperado. Tente novamente em instantes.'
+        : 'O servidor está indisponível no momento (pode estar iniciando). Tente novamente em alguns segundos.',
+    )
+  }
+  if (!res.ok) {
+    const message = (body as { message?: unknown } | null)?.message
+    throw new ApiError(res.status, typeof message === 'string' ? message : 'Erro inesperado')
+  }
   return body as T
 }
 
