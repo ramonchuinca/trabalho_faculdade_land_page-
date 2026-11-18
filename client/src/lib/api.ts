@@ -1,5 +1,5 @@
 // Cliente HTTP da API. Em dev usa o proxy do Vite (/api); em produção, VITE_API_URL (Render).
-const BASE = import.meta.env.VITE_API_URL ?? ''
+const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
 export const TOKEN_KEY = 'vitalis_token'
 /** Disparado quando a API recusa o token da sessão atual (expirado, revogado ou de outra conta). */
 export const SESSION_EXPIRED_EVENT = 'vitalis:session-expired'

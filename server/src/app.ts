@@ -13,7 +13,9 @@ export const app = express();
 
 app.set("trust proxy", 1); // Render fica atrás de proxy
 app.use(helmet());
-app.use(cors({ origin: env.CLIENT_ORIGIN.split(",").map((o) => o.trim()) }));
+// Sem barra final: o header Origin do navegador nunca a traz, e "https://x.app/" não casaria.
+const allowedOrigins = env.CLIENT_ORIGIN.split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
