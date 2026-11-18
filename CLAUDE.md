@@ -25,12 +25,12 @@ npm run typecheck        # tsc --noEmit
 npm run build && npm start
 
 # Front (client/)
-npm run dev              # http://localhost:5173, proxy /api -> localhost:3333 (VITE_MOCK=1 = sem backend)
+npm run dev              # http://localhost:5173, proxy /api -> localhost:3333
 npm run build            # tsc -b && vite build (é o typecheck do front)
 npm run lint             # oxlint
 ```
 
-Não há testes automatizados ainda. Logins do seed (senha `senha12345`): `paciente@vitalis.test`, `admin@vitalis.test`.
+Não há testes automatizados ainda. Logins do seed (senha `senha12345`): `paciente@vitalis.test`, `admin@vitalis.test` (também `maria@` e `joao@vitalis.test`). O seed cria consultas de demonstração (pendentes e uma confirmada) e uma mensagem de chat.
 
 ## Arquitetura (o que exige ler vários arquivos)
 
@@ -48,16 +48,22 @@ Não há testes automatizados ainda. Logins do seed (senha `senha12345`): `pacie
 
 **Front do paciente** (`client/src/pages/`): `Services`, `Doctors`, `Book` (wizard serviço → médico → dia/horário → confirmar), `Auth` (login/cadastro, mesmo componente com `mode`), `MyAppointments`, `NotFound`; `ProtectedRoute` protege `/minhas-consultas`. O estado do wizard vive na **URL** (`?service=&doctor=&date=&start=`), então o login no meio do fluxo não perde a escolha. Datas/horas são exibidas no fuso da clínica via `lib/format.ts`; `lib/icons.tsx` mapeia `Service.icon` (kebab-case lucide) — ao criar um serviço com ícone novo, adicionar ao mapa.
 
-**Mock do front:** `VITE_MOCK=1 npm run dev` (só em dev) troca `api()` por uma API falsa em memória (`client/src/lib/mock.ts`) para ver o visual sem backend. Os dados somem ao recarregar e as regras (ex.: 409) não são reais — não usar para validar comportamento.
+**Confirmação e hospital (role `admin` = recepção):** a consulta nasce `scheduled` e a recepção a confirma depois de falar com o paciente: `PATCH /appointments/:id/confirm` grava `confirmedAt`/`confirmedBy`/`confirmChannel` (phone|whatsapp|chat|other). **O `status` continua `scheduled` de propósito**: o índice único anti double-booking só vale para esse status, então criar um status `confirmed` liberaria o horário. "Pendente" = `scheduled && !confirmedAt`. `PATCH /:id/reschedule` (admin) remarca para outro slot válido do mesmo médico (mesmas regras do POST; colisão → 409), guarda o histórico em `reschedules[]`, **derruba a confirmação** a menos que venha `confirmChannel` (atendente já combinou o novo horário) e avisa o paciente com uma mensagem automática no chat. Também existe `PATCH /:id/complete` (admin) e `GET /appointments` do admin vem com `patient` populado (nome/telefone/e-mail). O telefone é **obrigatório** no cadastro (a recepção precisa dele). Front: `pages/admin/Panel.tsx` (`/painel`: abas Pendentes/Confirmadas/Histórico/Todas, busca, botões Ligar `tel:`, WhatsApp `wa.me` com mensagem pronta, Chat e Confirmar) e `pages/admin/Inbox.tsx` (`/painel/mensagens`). Contato por WhatsApp é só um link `wa.me` (grátis; o atendente clica em enviar). Enviar sozinho exigiria a WhatsApp Business API (paga/aprovação da Meta), não implementada.
+
+**Sessão por aba (armadilha real):** o token JWT fica em **`sessionStorage`** (`tokenStore` em `lib/api.ts`), não em `localStorage`. Com `localStorage` todas as abas do navegador dividiam o mesmo token: logar como admin numa aba e recarregar a aba do paciente a transformava em admin (e a aba antiga ficava em loop de 403 em `/chat/inbox`). Assim dá para testar paciente e recepção lado a lado no mesmo navegador, e o reload mantém a conta de cada aba. Custo conhecido: fechar a aba encerra a sessão (aceitável aqui; um "lembrar de mim" exigiria cookie httpOnly/refresh token). `lib/auth.tsx` também limpa o cache do React Query (`qc.clear()`) em login/logout — sem isso um usuário enxergava por até 1 min dados em cache do anterior — e `api()` dispara `SESSION_EXPIRED_EVENT` em 401 com token.
+
+**Chat paciente ↔ recepção:** model `Message` (uma conversa por paciente), rotas em `routes/chat.ts` (`/chat` do paciente; `/chat/inbox*` do admin; `/chat/unread` para ambos). Sem websocket: o front faz **polling** (`refetchInterval` 4–8 s) — ver `components/Chat.tsx` (balão flutuante do paciente + `ChatThread` reutilizado na caixa de entrada). Se precisar de tempo real, trocar por Socket.io/SSE.
+
+**Visual:** tema em `client/src/index.css` (`brand-*` teal + `accent-*` índigo, gradientes, `glass`, `card-lift`, `skeleton`, animações `animate-fade-up/pop/float`; respeita `prefers-reduced-motion`). Gradiente em botões: `bg-linear-to-r` (Tailwind v4, não `bg-gradient-to-*`).
 
 ## Estado atual e próximos passos
 
-Feito e **testado de ponta a ponta contra o Atlas** (24 checagens via HTTP: register/login, slots, agendar, 409 em horário duplicado, 400 para horário fora da grade/passado/serviço errado, 403 ao cancelar consulta alheia, cancelar libera o slot, admin vê todas). Front do paciente completo (catálogo, wizard de agendamento, auth, minhas consultas com cancelar). Ainda **não há testes automatizados** e o front só foi validado por build/lint, não em navegador com dados reais.
+Feito e **testado de ponta a ponta contra o Atlas** (roteiros HTTP: 24 do núcleo + 26 de confirmação/chat + 20 de reagendamento; o primeiro cobre: register/login, slots, agendar, 409 em horário duplicado, 400 para horário fora da grade/passado/serviço errado, 403 ao cancelar consulta alheia, cancelar libera o slot, admin vê todas). Front do paciente completo (catálogo, wizard, auth, minhas consultas com cancelar), painel da recepção com confirmação e chat. As rotas de confirmação/chat foram testadas por HTTP (26 checagens) e as telas verificadas em navegador headless (Edge + puppeteer-core), sem erros de console. Ainda **não há testes automatizados** e o front só foi validado por build/lint, não em navegador com dados reais.
 
 Pendências (nesta ordem):
 1. Deploy: Render (`server/`, build `npm install && npm run build`, start `npm start`, vars `MONGODB_URI`/`JWT_SECRET`/`CLIENT_ORIGIN`; no Atlas liberar `0.0.0.0/0` em Network Access) e Netlify (`client/`, var `VITE_API_URL`; `public/_redirects` já trata o SPA). O plano gratuito do Render dorme após ~15 min — manter estados de loading amigáveis.
-2. Painel do hospital (role `admin`): agenda geral, CRUD de médicos/serviços/horários — rotas de escrita do admin ainda não existem na API. `GET /appointments` já devolve todas para admin.
-3. Opcional: testes automatizados da API (o roteiro usado está nas regras acima) e revisão visual/responsiva do front.
+2. Painel do hospital — falta o CRUD de médicos/serviços/horários (rotas de escrita do admin ainda não existem na API). Ideias: remarcação feita pelo próprio paciente, notificação por e-mail/WhatsApp automático, papel `doctor` com agenda própria.
+3. Opcional: testes automatizados da API (o roteiro usado está nas regras acima e nos fluxos de confirmação/chat) e revisão visual/responsiva do front.
 
 **Ambiente local (armadilhas já encontradas):** `server/.env` não vai para o git. Na `MONGODB_URI`, caracteres especiais da senha precisam ser codificados (`:` → `%3A`, `@` → `%40`) e **não** deve sobrar `:` extra antes da senha (dá `bad auth`). Se aparecer `querySrv ECONNREFUSED`, o DNS local está recusando consultas SRV: definir `DNS_SERVERS=8.8.8.8,1.1.1.1` no `.env` (lido em `server/src/env.ts`; no Render não é necessário).
 
