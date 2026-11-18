@@ -1,0 +1,12 @@
+# O Netlify só lê este arquivo na raiz do repositório; "base" faz o build rodar dentro de client/.
+[build]
+  base = "client"
+  command = "npm run build"
+  publish = "dist" # relativo à base => client/dist
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Defina no painel do Netlify (Site configuration > Environment variables) ANTES do deploy:
+#   VITE_API_URL = https://SUA-API.onrender.com   (o Vite grava o valor no build)
+# O fallback do SPA está em client/public/_redirects.
