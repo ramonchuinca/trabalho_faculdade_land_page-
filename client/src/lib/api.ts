@@ -17,6 +17,16 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Modo demonstração sem backend: `VITE_MOCK=1 npm run dev`. Fora do dev, nunca é usado.
+  if (import.meta.env.DEV && import.meta.env.VITE_MOCK) {
+    const { mockApi } = await import('./mock')
+    try {
+      return (await mockApi(path, init)) as T
+    } catch (e) {
+      const err = e as { status?: number; message: string }
+      throw new ApiError(err.status ?? 500, err.message)
+    }
+  }
   const token = tokenStore.get()
   const res = await fetch(`${BASE}/api${path}`, {
     ...init,
