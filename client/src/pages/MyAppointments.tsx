@@ -1,16 +1,20 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarX, CheckCircle2 } from 'lucide-react'
+import { BadgeCheck, CalendarX, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { api, type Appointment } from '../lib/api'
 import { dateTimeOf, money } from '../lib/format'
 import { ServiceIcon } from '../lib/icons'
 import { btnPrimary, ErrorMsg, Loading, PageHeader } from '../components/ui'
 
-const STATUS = {
-  scheduled: { label: 'Agendada', cls: 'bg-brand-100 text-brand-700' },
-  cancelled: { label: 'Cancelada', cls: 'bg-slate-100 text-slate-500' },
-  completed: { label: 'Concluída', cls: 'bg-emerald-100 text-emerald-700' },
-} as const
+const CHANNEL: Record<string, string> = { phone: 'telefone', whatsapp: 'WhatsApp', chat: 'chat', other: 'a recepção' }
+
+// 'Agendada' só vira 'Confirmada' depois que a recepção fala com o paciente.
+function statusOf(a: Appointment) {
+  if (a.status === 'cancelled') return { label: 'Cancelada', cls: 'bg-slate-100 text-slate-500', icon: XCircle }
+  if (a.status === 'completed') return { label: 'Concluída', cls: 'bg-sky-100 text-sky-700', icon: CheckCircle2 }
+  if (a.confirmedAt) return { label: 'Confirmada', cls: 'bg-emerald-100 text-emerald-700', icon: BadgeCheck }
+  return { label: 'Aguardando confirmação', cls: 'bg-amber-100 text-amber-800', icon: Clock }
+}
 
 export default function MyAppointments() {
   const qc = useQueryClient()
@@ -39,9 +43,10 @@ export default function MyAppointments() {
       <PageHeader title="Minhas consultas" />
 
       {booked && (
-        <p role="status" className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-emerald-800">
-          <CheckCircle2 className="size-5" /> Consulta agendada com sucesso!
-        </p>
+        <div role="status" className="mb-6 animate-pop rounded-2xl border border-emerald-200 bg-linear-to-r from-emerald-50 to-teal-50 p-4 text-emerald-900">
+          <p className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-5" /> Consulta agendada com sucesso!</p>
+          <p className="mt-1 text-sm text-emerald-800/80">Agora é com a gente: a recepção vai entrar em contato por telefone ou WhatsApp para <strong>confirmar</strong> seu horário. Você também pode tirar dúvidas pelo chat no canto da tela.</p>
+        </div>
       )}
       {isLoading && <Loading />}
       {isError && <ErrorMsg>Não foi possível carregar suas consultas.</ErrorMsg>}
@@ -69,19 +74,21 @@ function Section({ title, items, onCancel, pendingId }: { title: string; items: 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
       <ul className="space-y-3">
         {items.map((a) => {
-          const st = STATUS[a.status]
+          const st = statusOf(a)
           return (
-            <li key={a._id} className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <li key={a._id} className="card-lift flex animate-fade-up items-center gap-4 rounded-2xl border border-line bg-surface p-4 shadow-sm">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                 <ServiceIcon name={a.service.icon} className="size-5" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{a.service.name}</p>
                 <p className="text-sm text-muted">{a.doctor.name} · {money(a.service.price)}</p>
-                <p className="mt-1 text-sm capitalize">{dateTimeOf(a.start)}</p>
+                <p className="mt-1 text-sm">{dateTimeOf(a.start)}</p>
+                {a.status === 'scheduled' && !!a.reschedules?.length && <p className="mt-0.5 text-xs text-accent-700">Horário alterado pela recepção (era {dateTimeOf(a.reschedules.at(-1)!.from)})</p>}
+                {a.status === 'scheduled' && a.confirmedAt && <p className="mt-0.5 text-xs text-emerald-700">Confirmada pela recepção via {CHANNEL[a.confirmChannel ?? 'other']}</p>}
               </div>
               <div className="flex flex-col items-end gap-2">
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}><st.icon className="size-3.5" />{st.label}</span>
                 {onCancel && a.status === 'scheduled' && (
                   <button onClick={() => onCancel(a._id)} disabled={pendingId === a._id} className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50">
                     {pendingId === a._id ? 'Cancelando…' : 'Cancelar'}

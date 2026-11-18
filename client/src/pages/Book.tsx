@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft } from 'lucide-react'
+import { BadgeCheck, Check, ChevronLeft } from 'lucide-react'
 import { api, ApiError, type Appointment, type Doctor, type Service } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { addDays, clinicDate, dateTimeOf, dayChip, money, timeOf } from '../lib/format'
@@ -55,7 +55,7 @@ export default function Book() {
         {STEPS.map((label, i) => (
           <li key={label} className="flex items-center gap-2" aria-current={i === step ? 'step' : undefined}>
             <span className={`flex size-6 items-center justify-center rounded-full text-xs font-bold ${
-              i < step ? 'bg-brand-600 text-white' : i === step ? 'border-2 border-brand-600 text-brand-700' : 'border border-line text-muted'}`}>
+              i < step ? 'bg-linear-to-br from-brand-600 to-accent-600 text-white' : i === step ? 'border-2 border-accent-600 text-accent-700' : 'border border-line text-muted'}`}>
               {i < step ? <Check className="size-3.5" /> : i + 1}
             </span>
             <span className={`hidden sm:inline ${i === step ? 'font-semibold' : 'text-muted'}`}>{label}</span>
@@ -74,8 +74,8 @@ export default function Book() {
         <div className="grid gap-3 sm:grid-cols-2">
           {services.data!.map((s) => (
             <button key={s._id} onClick={() => set({ service: s._id })}
-              className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 text-left shadow-sm transition hover:border-brand-500 hover:shadow-md">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><ServiceIcon name={s.icon} className="size-5" /></span>
+              className="card-lift flex animate-fade-up items-start gap-3 rounded-2xl border border-line bg-surface p-4 text-left shadow-sm">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-brand-50 to-accent-50 text-brand-600"><ServiceIcon name={s.icon} className="size-5" /></span>
               <span>
                 <span className="block font-semibold">{s.name}</span>
                 <span className="text-sm text-muted">{money(s.price)} · {s.durationMin} min</span>
@@ -102,7 +102,7 @@ function DoctorStep({ service, doctors, onPick }: { service: Service; doctors: D
       <p className="text-muted">Quem vai atender você em <strong className="text-ink">{service.name}</strong>?</p>
       {list.map((d) => (
         <button key={d._id} onClick={() => onPick(d._id)}
-          className="flex w-full items-center gap-4 rounded-2xl border border-line bg-surface p-4 text-left shadow-sm transition hover:border-brand-500 hover:shadow-md">
+          className="card-lift flex w-full animate-fade-up items-center gap-4 rounded-2xl border border-line bg-surface p-4 text-left shadow-sm">
           <Avatar name={d.name} photoUrl={d.photoUrl} />
           <span>
             <span className="block font-semibold">{d.name}</span>
@@ -133,7 +133,7 @@ function SlotStep({ doctor, date, onDate, onPick }: { doctor: Doctor; date: stri
           const active = d === date
           return (
             <button key={d} role="option" aria-selected={active} onClick={() => onDate(d)}
-              className={`flex w-16 shrink-0 flex-col items-center rounded-xl border px-2 py-2 transition ${active ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-surface hover:border-brand-500'}`}>
+              className={`flex w-16 shrink-0 flex-col items-center rounded-xl border px-2 py-2 transition ${active ? 'border-transparent bg-linear-to-br from-brand-600 to-accent-600 text-white shadow-glow' : 'border-line bg-surface hover:border-brand-500'}`}>
               <span className="text-xs uppercase">{c.weekday}</span>
               <span className="text-lg font-bold">{c.day}</span>
               <span className="text-xs opacity-80">{c.month}</span>
@@ -187,14 +187,18 @@ function ConfirmStep({ service, doctor, start, onTaken }: { service: Service; do
   })
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+    <div className="glass animate-pop rounded-2xl border border-white/70 p-6 shadow-soft">
       <h2 className="text-xl font-bold">Confirme os dados</h2>
       <dl className="mt-4 space-y-3 text-sm">
         <Row label="Serviço" value={`${service.name} (${money(service.price)})`} />
         <Row label="Profissional" value={`${doctor.name} — ${doctor.specialty}`} />
-        <Row label="Quando" value={<span className="capitalize">{dateTimeOf(start)}</span>} />
+        <Row label="Quando" value={dateTimeOf(start)} />
         <Row label="Duração" value={`${doctor.slotMinutes} min`} />
       </dl>
+
+      <p className="mt-4 flex items-start gap-2 rounded-xl bg-accent-50 px-3 py-2 text-sm text-accent-700">
+        <BadgeCheck className="mt-0.5 size-4 shrink-0" /> Depois de agendar, a recepção entra em contato por telefone ou WhatsApp para confirmar seu horário.
+      </p>
 
       <label className="mt-5 block text-sm font-medium">
         Observações (opcional)

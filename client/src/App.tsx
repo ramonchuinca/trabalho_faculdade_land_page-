@@ -10,6 +10,8 @@ import Book from './pages/Book'
 import Auth from './pages/Auth'
 import MyAppointments from './pages/MyAppointments'
 import NotFound from './pages/NotFound'
+import Panel from './pages/admin/Panel'
+import Inbox from './pages/admin/Inbox'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60_000 } },
@@ -28,8 +30,12 @@ export default function App() {
               <Route path="agendar" element={<Book />} />
               <Route path="entrar" element={<Auth mode="login" />} />
               <Route path="cadastro" element={<Auth mode="register" />} />
-              <Route element={<ProtectedRoute />}>
+              <Route element={<ProtectedRoute roles={['patient']} />}>
                 <Route path="minhas-consultas" element={<MyAppointments />} />
+              </Route>
+              <Route element={<ProtectedRoute roles={['admin']} />}>
+                <Route path="painel" element={<Panel />} />
+                <Route path="painel/mensagens" element={<Inbox />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Route>

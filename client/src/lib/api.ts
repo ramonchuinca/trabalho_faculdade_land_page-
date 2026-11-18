@@ -1,11 +1,22 @@
 // Cliente HTTP da API. Em dev usa o proxy do Vite (/api); em produção, VITE_API_URL (Render).
 const BASE = import.meta.env.VITE_API_URL ?? ''
-const TOKEN_KEY = 'vitalis_token'
+export const TOKEN_KEY = 'vitalis_token'
+/** Disparado quando a API recusa o token da sessão atual (expirado, revogado ou de outra conta). */
+export const SESSION_EXPIRED_EVENT = 'vitalis:session-expired'
+
+// A sessão fica em sessionStorage: é POR ABA. Com localStorage todas as abas do navegador dividiam o mesmo token
+// e a última conta logada vencia (ao recarregar, a aba do paciente virava admin). Assim cada aba tem a sua conta
+// e o reload mantém a sessão da própria aba. Custo: fechar a aba encerra a sessão.
+const store = (() => {
+  try { return window.sessionStorage } catch { return null }
+})()
+// Remove o token da versão antiga (localStorage) para ele não ficar esquecido no navegador.
+try { window.localStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
 
 export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  get: () => store?.getItem(TOKEN_KEY) ?? null,
+  set: (t: string) => store?.setItem(TOKEN_KEY, t),
+  clear: () => store?.removeItem(TOKEN_KEY),
 }
 
 export class ApiError extends Error {
@@ -17,16 +28,6 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // Modo demonstração sem backend: `VITE_MOCK=1 npm run dev`. Fora do dev, nunca é usado.
-  if (import.meta.env.DEV && import.meta.env.VITE_MOCK) {
-    const { mockApi } = await import('./mock')
-    try {
-      return (await mockApi(path, init)) as T
-    } catch (e) {
-      const err = e as { status?: number; message: string }
-      throw new ApiError(err.status ?? 500, err.message)
-    }
-  }
   const token = tokenStore.get()
   const res = await fetch(`${BASE}/api${path}`, {
     ...init,
@@ -37,6 +38,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   })
   const body = await res.json().catch(() => ({}))
+  // 401 com token enviado = sessão inválida: limpa e avisa o app, em vez de ficar repetindo requisições (polling).
+  if (res.status === 401 && token) {
+    tokenStore.clear()
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+  }
   if (!res.ok) throw new ApiError(res.status, body.message ?? 'Erro inesperado')
   return body as T
 }
@@ -74,11 +80,41 @@ export interface Doctor {
   slotMinutes: number
 }
 
+export type ConfirmChannel = 'phone' | 'whatsapp' | 'chat' | 'other'
+
+export interface PatientContact {
+  _id: string
+  name: string
+  phone?: string | null
+  email?: string
+}
+
 export interface Appointment {
   _id: string
   start: string
   end: string
   status: 'scheduled' | 'cancelled' | 'completed'
+  /** Preenchido quando a recepção confirmou (o status continua "scheduled"). */
+  confirmedAt: string | null
+  confirmChannel: ConfirmChannel | null
+  /** Remarcações feitas pela recepção (horário anterior + quando). */
+  reschedules?: { from: string; at: string }[]
+  notes?: string
   doctor: Pick<Doctor, '_id' | 'name' | 'specialty' | 'photoUrl'>
   service: Pick<Service, '_id' | 'name' | 'price' | 'durationMin' | 'icon'>
+  /** Só vem populado para o admin; para o paciente é apenas o id. */
+  patient?: PatientContact | string
+}
+
+export interface ChatMessage {
+  _id: string
+  from: 'patient' | 'staff'
+  text: string
+  createdAt: string
+}
+
+export interface InboxItem {
+  patient: PatientContact
+  last: { text: string; from: 'patient' | 'staff'; createdAt: string }
+  unread: number
 }

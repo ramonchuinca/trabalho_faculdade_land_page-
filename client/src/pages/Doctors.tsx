@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type Doctor, type Service } from '../lib/api'
-import { Avatar, ErrorMsg, Loading, PageHeader } from '../components/ui'
+import { Avatar, CardSkeletons, ErrorMsg, PageHeader } from '../components/ui'
 
 export default function Doctors() {
   const doctors = useQuery({ queryKey: ['doctors'], queryFn: () => api<Doctor[]>('/doctors') })
@@ -10,15 +10,15 @@ export default function Doctors() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <PageHeader title="Profissionais" subtitle="Conheça a equipe que cuida de você." />
-      {doctors.isLoading && <Loading />}
       {doctors.isError && <ErrorMsg>Não foi possível carregar os profissionais.</ErrorMsg>}
       <div className="grid gap-4 md:grid-cols-2">
-        {doctors.data?.map((d) => {
+        {doctors.isLoading && <CardSkeletons n={4} className="h-44" />}
+        {doctors.data?.map((d, i) => {
           // Agendar direto com o médico: se ele faz um só serviço, pula o passo de serviço.
           const own = services.data?.filter((s) => d.services.includes(s._id)) ?? []
           const target = own.length === 1 ? `/agendar?service=${own[0]._id}&doctor=${d._id}` : own.length ? `/agendar?service=${own[0]._id}` : '/agendar'
           return (
-            <article key={d._id} className="flex gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm">
+            <article key={d._id} className="card-lift flex animate-fade-up gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm" style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}>
               <Avatar name={d.name} photoUrl={d.photoUrl} />
               <div className="flex-1">
                 <h2 className="font-semibold">{d.name}</h2>

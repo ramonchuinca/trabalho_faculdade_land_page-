@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { btnPrimary, ErrorMsg, inputClass } from '../components/ui'
 
@@ -7,15 +7,15 @@ type Mode = 'login' | 'register'
 
 export default function Auth({ mode }: { mode: Mode }) {
   const { user, login, register } = useAuth()
-  const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as { from?: string } | null)?.from ?? '/minhas-consultas'
+  const explicitFrom = (location.state as { from?: string } | null)?.from
 
   const [form, setForm] = useState({ name: '', email: '', password: '', cpf: '', phone: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  if (user) return <Navigate to={from} replace />
+  // Quem tem rota de origem volta para ela; senão, cada papel cai na sua tela inicial.
+  if (user) return <Navigate to={explicitFrom ?? (user.role === 'admin' ? '/painel' : '/minhas-consultas')} replace />
 
   const field = (k: keyof typeof form) => ({
     value: form[k],
@@ -28,8 +28,7 @@ export default function Auth({ mode }: { mode: Mode }) {
     setBusy(true)
     try {
       if (mode === 'login') await login(form.email, form.password)
-      else await register({ name: form.name, email: form.email, password: form.password, cpf: form.cpf || undefined, phone: form.phone || undefined })
-      navigate(from, { replace: true })
+      else await register({ name: form.name, email: form.email, password: form.password, cpf: form.cpf || undefined, phone: form.phone })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -61,8 +60,9 @@ export default function Auth({ mode }: { mode: Mode }) {
             <label className="block text-sm font-medium">CPF <span className="font-normal text-muted">(opcional)</span>
               <input className={inputClass} inputMode="numeric" {...field('cpf')} />
             </label>
-            <label className="block text-sm font-medium">Telefone <span className="font-normal text-muted">(opcional)</span>
-              <input className={inputClass} type="tel" autoComplete="tel" {...field('phone')} />
+            <label className="block text-sm font-medium">Telefone / WhatsApp
+              <input className={inputClass} type="tel" required autoComplete="tel" placeholder="(11) 91234-5678" pattern="[0-9()\s+\-]{10,20}" title="Informe o DDD e o número" {...field('phone')} />
+              <span className="text-xs font-normal text-muted">A recepção confirma seu agendamento por aqui.</span>
             </label>
           </div>
         )}
@@ -73,6 +73,20 @@ export default function Auth({ mode }: { mode: Mode }) {
           {busy ? 'Aguarde…' : isLogin ? 'Entrar' : 'Criar conta'}
         </button>
       </form>
+
+      {isLogin && (
+        <div className="mt-4 rounded-2xl border border-dashed border-accent-100 bg-accent-50/60 p-4 text-sm">
+          <p className="font-semibold text-accent-700">Contas de demonstração (senha: senha12345)</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {[['Paciente', 'paciente@vitalis.test'], ['Recepção', 'admin@vitalis.test']].map(([label, email]) => (
+              <button key={email} type="button" onClick={() => setForm((f) => ({ ...f, email, password: 'senha12345' }))}
+                className="rounded-lg bg-white px-3 py-1.5 font-medium shadow-sm ring-1 ring-line transition hover:ring-accent-500">
+                Entrar como {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="mt-4 text-center text-sm text-muted">
         {isLogin ? 'Ainda não tem conta? ' : 'Já tem conta? '}
